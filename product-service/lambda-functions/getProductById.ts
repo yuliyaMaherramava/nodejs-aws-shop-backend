@@ -5,6 +5,13 @@ import {
 } from "aws-lambda";
 import { products } from "./products";
 
+const headers = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Content-Type": "application/json",
+};
+
 export const handler: APIGatewayProxyHandler = async ({
   pathParameters,
 }: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
@@ -13,12 +20,7 @@ export const handler: APIGatewayProxyHandler = async ({
   if (!id) {
     return {
       statusCode: 400,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({ message: "Product ID is required" }),
     };
   }
@@ -28,24 +30,14 @@ export const handler: APIGatewayProxyHandler = async ({
   if (!product) {
     return {
       statusCode: 404,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({ message: "Product not found" }),
     };
   }
 
   return {
     statusCode: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(product),
   };
 };
