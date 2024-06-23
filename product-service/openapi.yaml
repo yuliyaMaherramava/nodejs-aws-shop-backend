@@ -15,18 +15,24 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    title:
-                      type: string
-                    description:
-                      type: string
-                    price:
-                      type: number
+                $ref: "#/components/schemas/Product"
+    post:
+      summary: Create a new product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewProduct"
+      responses:
+        "200":
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewProduct"
+        "400":
+          description: Invalid Input Data
 
   /products/{id}:
     get:
@@ -43,16 +49,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                  title:
-                    type: string
-                  description:
-                    type: string
-                  price:
-                    type: number
+                $ref: "#/components/schemas/Product"
         "404":
           description: Product not found
         "400":
@@ -70,4 +67,17 @@ components:
         description:
           type: string
         price:
+          type: number
+        count:
+          type: number
+    NewProduct:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        count:
           type: number
