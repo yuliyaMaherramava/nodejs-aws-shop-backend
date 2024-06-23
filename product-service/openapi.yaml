@@ -1,0 +1,73 @@
+openapi: 3.1.0
+info:
+  title: Products Service API
+  version: 1.0.0
+servers:
+  - url: https://hbeblnv7o0.execute-api.us-east-1.amazonaws.com/prod
+
+paths:
+  /products:
+    get:
+      summary: Get list of products
+      responses:
+        "200":
+          description: Returns a list of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    title:
+                      type: string
+                    description:
+                      type: string
+                    price:
+                      type: number
+
+  /products/{id}:
+    get:
+      summary: Get a product by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A single product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+                  description:
+                    type: string
+                  price:
+                    type: number
+        "404":
+          description: Product not found
+        "400":
+          description: Invalid request
+
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
