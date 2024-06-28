@@ -1,29 +1,67 @@
-import { APIGatewayProxyHandler, APIGatewayProxyResult } from "aws-lambda";
-import { products } from "./products";
+import {
+  APIGatewayProxyEvent,
+  APIGatewayProxyHandler,
+  APIGatewayProxyResult,
+} from "aws-lambda";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
-export const handler: APIGatewayProxyHandler =
-  async (): Promise<APIGatewayProxyResult> => {
+const headers = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Content-Type": "application/json",
+};
+
+const client = new DynamoDBClient({ region: "us-east-1" });
+const ddbDocClient = DynamoDBDocumentClient.from(client);
+
+const PRODUCTS_TABLE_NAME = process.env.PRODUCTS_TABLE_NAME || "products";
+const STOCKS_TABLE_NAME = process.env.STOCKS_TABLE_NAME || "stocks";
+
+export const handler: APIGatewayProxyHandler = async (
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> => {
+  try {
+    console.log("Log event", JSON.stringify(event));
+
+    const allProducts = await ddbDocClient.send(
+      new ScanCommand({ TableName: PRODUCTS_TABLE_NAME })
+    );
+
+    const allStocks = await ddbDocClient.send(
+      new ScanCommand({ TableName: STOCKS_TABLE_NAME })
+    );
+
+    const products = allProducts.Items || [];
+    const stocks = allStocks.Items || [];
+
     if (!products.length) {
       return {
-        statusCode: 404,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: "No products found" }),
+        statusCode: 200,
+        headers,
+        body: JSON.stringify([]),
       };
     }
 
+    const productsWithStocks = products.map((product) => ({
+      ...product,
+      count:
+        stocks.find((stock) => stock.product_id === product.id)?.count ?? 0,
+    }));
+
     return {
       statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(products),
+      body: JSON.stringify(productsWithStocks),
+      headers,
     };
-  };
+  } catch (error: any) {
+    console.error("server error while getting list of products", error);
+
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ message: error.message }),
+    };
+  }
+};
