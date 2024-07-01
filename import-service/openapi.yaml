@@ -1,0 +1,37 @@
+openapi: 3.1.0
+info:
+  title: Import Service API
+  version: 1.0.0
+servers:
+  - url: https://93nnm5h3ui.execute-api.us-east-1.amazonaws.com/prod
+
+paths:
+  /import:
+    get:
+      summary: Get signed url to upload a file to S3
+      parameters:
+        - in: query
+          name: name
+          required: true
+          schema:
+            type: string
+          description: File name to upload
+      responses:
+        "200":
+          description: Returns a signed url
+          content:
+            application/json:
+              type: object
+              properties:
+                url:
+                  type: string
+        "400":
+          description: If no file name or empty
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Invalid file name
