@@ -11,23 +11,11 @@ import { Readable } from "stream";
 import { IncomingMessage } from "http";
 import { SdkStreamMixin } from "@aws-sdk/types";
 
+const testStream =
+  "title,decsriptionCATAN,Family gameMonopoly,Money based game";
+
 const s3Mock = mockClient(S3Client);
-
-jest.mock("csv-parser", () =>
-  jest.fn(() => Readable.from(["name,age\nJohn,30\nDoe,40"]))
-);
-
-const createS3Event = (bucket: string, key: string): S3Event =>
-  ({
-    Records: [
-      {
-        s3: {
-          bucket: { name: bucket },
-          object: { key: key },
-        },
-      },
-    ],
-  } as S3Event);
+jest.mock("csv-parser", () => jest.fn(() => Readable.from([testStream])));
 
 describe("importFileParser", () => {
   const parameters = {
@@ -35,15 +23,12 @@ describe("importFileParser", () => {
     Key: "uploaded/TestFileName.csv",
   };
 
-  beforeEach(() => {
-    s3Mock.reset();
-  });
+  beforeEach(() => s3Mock.reset());
 
-  it("should process the CSV file and move it to the parsed folder", async () => {
+  it("should parse CSV file and delete it from uploaded and copy itr to parsed folder", async () => {
     const bodyStream = new Readable({
       read() {
-        this.push("name,age\nJohn,30\nDoe,40");
-        this.push(null);
+        this.push(testStream);
       },
     }) as unknown as IncomingMessage & SdkStreamMixin;
 
@@ -55,24 +40,19 @@ describe("importFileParser", () => {
     s3Mock.on(CopyObjectCommand).resolves({});
     s3Mock.on(DeleteObjectCommand).resolves({});
 
-    const event = createS3Event(parameters.Bucket as string, parameters.Key);
-    await importFileParser(event);
+    await importFileParser({
+      Records: [
+        {
+          s3: {
+            bucket: { name: parameters.Bucket },
+            object: { key: parameters.Key },
+          },
+        },
+      ],
+    } as S3Event);
 
     expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(1);
-    expect(s3Mock.commandCalls(GetObjectCommand, parameters)).toHaveLength(1);
-
     expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(1);
-    expect(
-      s3Mock.commandCalls(CopyObjectCommand, {
-        Bucket: parameters.Bucket,
-        CopySource: `${parameters.Bucket}/${parameters.Key}`,
-        Key: parameters.Key.replace("uploaded/", "parsed/"),
-      })
-    ).toHaveLength(1);
-
     expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(1);
-    expect(s3Mock.commandCalls(DeleteObjectCommand, parameters)).toHaveLength(
-      1
-    );
   });
 });

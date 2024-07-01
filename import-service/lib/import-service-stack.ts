@@ -5,7 +5,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { LambdaDestination } from "aws-cdk-lib/aws-s3-notifications";
 
-const BUCKET_NAME = process.env.BUCKET_NAME ?? "aws-import-service-bucket";
+const BUCKET_NAME = process.env.BUCKET_NAME!;
 
 export class ImportServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {

@@ -8,14 +8,14 @@ const headers = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-const BUCKET_NAME = process.env.BUCKET_NAME ?? "aws-import-service-bucket";
+const BUCKET_NAME = process.env.BUCKET_NAME;
 
 const client = new S3Client();
 
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
-  console.log("Log:", event);
+  console.log("Log: ", JSON.stringify(event));
 
   const { queryStringParameters } = event;
 

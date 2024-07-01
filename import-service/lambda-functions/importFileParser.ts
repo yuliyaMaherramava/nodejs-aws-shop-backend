@@ -15,7 +15,7 @@ const headers = {
   "Content-Type": "application/json",
 };
 
-const BUCKET_NAME = process.env.BUCKET_NAME ?? "aws-import-service-bucket";
+const BUCKET_NAME = process.env.BUCKET_NAME;
 
 const client = new S3Client();
 
@@ -29,7 +29,7 @@ interface Product {
 export const handler = async (
   event: S3Event
 ): Promise<APIGatewayProxyResult> => {
-  console.log("LOG: ", JSON.stringify(event));
+  console.log("Log: ", JSON.stringify(event));
 
   for (const record of event.Records) {
     const key = record.s3.object.key;
@@ -84,7 +84,7 @@ export const handler = async (
 
       console.log("A csv file has been deleted from the folder uploaded");
     } catch (error) {
-      console.error("Internal error:", error);
+      console.error("Internal server error:", error);
 
       return {
         statusCode: 500,
@@ -97,6 +97,6 @@ export const handler = async (
   return {
     statusCode: 200,
     headers,
-    body: JSON.stringify({ message: "File parsing has been successfull" }),
+    body: JSON.stringify({ message: "Parsing file has been successfull" }),
   };
 };
