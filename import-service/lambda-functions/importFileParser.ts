@@ -50,38 +50,31 @@ export const handler = async (
         };
       }
 
-      const readableStream = result.Body as Readable;
+      const productRows = await parseFile(result.Body as Readable);
+      try {
+        let sqsPromises = productRows.map((product: Product) =>
+          sqsClient.send(
+            new SendMessageCommand({
+              QueueUrl: SQS_URL,
+              MessageBody: JSON.stringify(product),
+            })
+          )
+        );
 
-      await new Promise((resolve, reject): void => {
-        const products: Product[] = [];
-        readableStream
-          .pipe(csvParser({ separator: ";" }))
-          .on("data", async (data) => {
-            products.push(data);
-
-            try {
-              const response = await sqsClient.send(
-                new SendMessageCommand({
-                  QueueUrl: SQS_URL,
-                  MessageBody: JSON.stringify(data),
-                })
-              );
-              console.log("SQS message sent", response.MessageId);
-            } catch (error) {
-              console.error("Error sending SQS message", error);
-            }
-          })
-          .on("end", () => resolve(products))
-          .on("error", reject);
-      });
-
-      const newKey = key.replace("uploaded", "parsed");
+        await Promise.all(sqsPromises);
+        console.log(
+          "SQS messages of parsed products sent successfully",
+          productRows
+        );
+      } catch (error) {
+        console.error("Error sending SQS message", error);
+      }
 
       await s3Client.send(
         new CopyObjectCommand({
           Bucket: BUCKET_NAME,
           CopySource: `${BUCKET_NAME}/${key}`,
-          Key: newKey,
+          Key: key.replace("uploaded", "parsed"),
         })
       );
 
@@ -112,3 +105,16 @@ export const handler = async (
     body: JSON.stringify({ message: "Parsing file has been successfull" }),
   };
 };
+
+async function parseFile(readableStream: Readable): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const products: Product[] = [];
+    readableStream
+      .pipe(csvParser({ separator: ";" }))
+      .on("data", (row) => {
+        products.push(row);
+      })
+      .on("end", () => resolve(products))
+      .on("error", (error) => reject(error));
+  });
+}
