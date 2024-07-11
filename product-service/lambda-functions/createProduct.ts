@@ -16,8 +16,8 @@ const headers = {
 const client = new DynamoDBClient({});
 const ddbDocClient = DynamoDBDocumentClient.from(client);
 
-const PRODUCTS_TABLE_NAME = process.env.PRODUCTS_TABLE_NAME;
-const STOCKS_TABLE_NAME = process.env.STOCKS_TABLE_NAME;
+const PRODUCTS_TABLE_NAME = process.env.PRODUCTS_TABLE_NAME || "products";
+const STOCKS_TABLE_NAME = process.env.STOCKS_TABLE_NAME || "stocks";
 
 export const handler = async (
   event: APIGatewayProxyEvent

@@ -8,8 +8,8 @@ import { SubscriptionFilter, Topic } from "aws-cdk-lib/aws-sns";
 import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
-const PRODUCTS_TABLE_NAME = process.env.PRODUCTS_TABLE_NAME!;
-const STOCKS_TABLE_NAME = process.env.STOCKS_TABLE_NAME!;
+const PRODUCTS_TABLE_NAME = process.env.PRODUCTS_TABLE_NAME || "products";
+const STOCKS_TABLE_NAME = process.env.STOCKS_TABLE_NAME || "stocks";
 
 export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
