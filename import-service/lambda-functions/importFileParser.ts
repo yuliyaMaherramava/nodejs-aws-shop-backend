@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   CopyObjectCommand,
 } from "@aws-sdk/client-s3";
+import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { Readable } from "stream";
 import * as csvParser from "csv-parser";
 
@@ -16,8 +17,10 @@ const headers = {
 };
 
 const BUCKET_NAME = process.env.BUCKET_NAME;
+const SQS_URL = process.env.SQS_URL;
 
-const client = new S3Client();
+const s3Client = new S3Client();
+const sqsClient = new SQSClient({ region: process.env.CDK_REGION });
 
 interface Product {
   title: string;
@@ -35,7 +38,7 @@ export const handler = async (
     const key = record.s3.object.key;
 
     try {
-      const result = await client.send(
+      const result = await s3Client.send(
         new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key })
       );
 
@@ -47,35 +50,37 @@ export const handler = async (
         };
       }
 
-      const readableStream = result.Body as Readable;
+      const productRows = await parseFile(result.Body as Readable);
+      try {
+        let sqsPromises = productRows.map((product: Product) =>
+          sqsClient.send(
+            new SendMessageCommand({
+              QueueUrl: SQS_URL,
+              MessageBody: JSON.stringify(product),
+            })
+          )
+        );
 
-      const csvData = await new Promise((resolve, reject): void => {
-        const products: Product[] = [];
-        readableStream
-          .pipe(csvParser({ separator: ";" }))
-          .on("data", (data) => {
-            products.push(data);
-            console.log(data);
-          })
-          .on("end", () => resolve(products))
-          .on("error", reject);
-      });
+        await Promise.all(sqsPromises);
+        console.log(
+          "SQS messages of parsed products sent successfully",
+          productRows
+        );
+      } catch (error) {
+        console.error("Error sending SQS message", error);
+      }
 
-      console.log("csvData"), csvData;
-
-      const newKey = key.replace("uploaded", "parsed");
-
-      await client.send(
+      await s3Client.send(
         new CopyObjectCommand({
           Bucket: BUCKET_NAME,
           CopySource: `${BUCKET_NAME}/${key}`,
-          Key: newKey,
+          Key: key.replace("uploaded", "parsed"),
         })
       );
 
       console.log("A csv file has been copied to the folder parsed");
 
-      await client.send(
+      await s3Client.send(
         new DeleteObjectCommand({
           Bucket: BUCKET_NAME,
           Key: key,
@@ -100,3 +105,16 @@ export const handler = async (
     body: JSON.stringify({ message: "Parsing file has been successfull" }),
   };
 };
+
+async function parseFile(readableStream: Readable): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const products: Product[] = [];
+    readableStream
+      .pipe(csvParser({ separator: ";" }))
+      .on("data", (row) => {
+        products.push(row);
+      })
+      .on("end", () => resolve(products))
+      .on("error", (error) => reject(error));
+  });
+}

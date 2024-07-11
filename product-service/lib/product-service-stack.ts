@@ -3,9 +3,14 @@ import { Construct } from "constructs";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import { Queue } from "aws-cdk-lib/aws-sqs";
+import { SubscriptionFilter, Topic } from "aws-cdk-lib/aws-sns";
+import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
 const PRODUCTS_TABLE_NAME = process.env.PRODUCTS_TABLE_NAME || "products";
 const STOCKS_TABLE_NAME = process.env.STOCKS_TABLE_NAME || "stocks";
+
 export class ProductServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -64,6 +69,49 @@ export class ProductServiceStack extends cdk.Stack {
     productsTable.grantReadData(getProductByIdFunction);
     stocksTable.grantReadData(getProductByIdFunction);
 
+    const productServiceQueue = new Queue(this, "ProductServiceQueue", {});
+
+    const productServiceTopic = new Topic(this, "ProductServiceTopic", {});
+
+    productServiceTopic.addSubscription(
+      new EmailSubscription(process.env.EMAIL || "")
+    );
+
+    productServiceTopic.addSubscription(
+      new EmailSubscription(process.env.FILTER_EMAIL || "", {
+        filterPolicy: {
+          price: SubscriptionFilter.numericFilter({
+            greaterThan: 50,
+          }),
+        },
+      })
+    );
+
+    const catalogBatchProcessFunction = new lambda.Function(
+      this,
+      "CatalogBatchProcessHandler",
+      {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        code: lambda.Code.fromAsset("lambda-functions"),
+        handler: "catalogBatchProcess.handler",
+        environment: {
+          PRODUCTS_TABLE_NAME,
+          STOCKS_TABLE_NAME,
+          SNS_TOPIC_ARN: productServiceTopic.topicArn,
+        },
+      }
+    );
+
+    productsTable.grantWriteData(catalogBatchProcessFunction);
+    stocksTable.grantWriteData(catalogBatchProcessFunction);
+
+    productServiceQueue.grantConsumeMessages(catalogBatchProcessFunction);
+    productServiceTopic.grantPublish(catalogBatchProcessFunction);
+
+    catalogBatchProcessFunction.addEventSource(
+      new SqsEventSource(productServiceQueue, { batchSize: 5 })
+    );
+
     const api = new apigateway.RestApi(this, "ProductsApi", {
       restApiName: "Products Service",
       description: "For managing products",
@@ -88,5 +136,15 @@ export class ProductServiceStack extends cdk.Stack {
       "GET",
       new apigateway.LambdaIntegration(getProductByIdFunction)
     );
+
+    new cdk.CfnOutput(this, "ProductServiceQueueArn", {
+      value: productServiceQueue.queueArn,
+      exportName: "ProductServiceQueueArn",
+    });
+
+    new cdk.CfnOutput(this, "ProductServiceQueueUrl", {
+      value: productServiceQueue.queueUrl,
+      exportName: "ProductServiceQueueUrl",
+    });
   }
 }

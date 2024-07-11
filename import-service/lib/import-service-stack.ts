@@ -1,17 +1,20 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import * as apigateway from "aws-cdk-lib/aws-apigateway";
-import * as s3 from "aws-cdk-lib/aws-s3";
+import { RestApi, Cors, LambdaIntegration } from "aws-cdk-lib/aws-apigateway";
+import { Bucket, EventType } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { LambdaDestination } from "aws-cdk-lib/aws-s3-notifications";
+import { Queue } from "aws-cdk-lib/aws-sqs";
 
 const BUCKET_NAME = process.env.BUCKET_NAME!;
+const SQS_ARN = process.env.SQS_ARN!;
+const SQS_URL = process.env.SQS_URL!;
 
 export class ImportServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const bucket = s3.Bucket.fromBucketName(
+    const bucket = Bucket.fromBucketName(
       this,
       "ImportServiceBucket",
       BUCKET_NAME
@@ -39,6 +42,7 @@ export class ImportServiceStack extends cdk.Stack {
         handler: "importFileParser.handler",
         environment: {
           BUCKET_NAME: bucket.bucketName,
+          SQS_URL,
         },
       }
     );
@@ -46,12 +50,12 @@ export class ImportServiceStack extends cdk.Stack {
     bucket.grantReadWrite(importProductsFileFunction);
     bucket.grantReadWrite(importFileParserFunction);
 
-    const api = new apigateway.RestApi(this, "ImportApi", {
+    const api = new RestApi(this, "ImportApi", {
       restApiName: "Import Files Service",
       description: "For importing csv files",
       defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowOrigins: Cors.ALL_ORIGINS,
+        allowMethods: Cors.ALL_METHODS,
         allowHeaders: [
           "Content-Type",
           "X-Amz-Date",
@@ -66,7 +70,7 @@ export class ImportServiceStack extends cdk.Stack {
 
     importResource.addMethod(
       "GET",
-      new apigateway.LambdaIntegration(importProductsFileFunction),
+      new LambdaIntegration(importProductsFileFunction),
       {
         requestParameters: {
           "method.request.querystring.name": true,
@@ -75,9 +79,17 @@ export class ImportServiceStack extends cdk.Stack {
     );
 
     bucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
+      EventType.OBJECT_CREATED,
       new LambdaDestination(importFileParserFunction),
       { prefix: "uploaded/" }
     );
+
+    const productServiceQueue = Queue.fromQueueArn(
+      this,
+      "ProductServiceQueue",
+      SQS_ARN
+    );
+
+    productServiceQueue.grantSendMessages(importFileParserFunction);
   }
 }
