@@ -8,8 +8,6 @@ const headers = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-const BUCKET_NAME = process.env.BUCKET_NAME;
-
 const client = new S3Client();
 
 export const handler = async (
@@ -28,7 +26,7 @@ export const handler = async (
     }
 
     const command = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
+      Bucket: process.env.BUCKET_NAME,
       Key: `uploaded/${queryStringParameters.name}`,
     });
     const signedUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
