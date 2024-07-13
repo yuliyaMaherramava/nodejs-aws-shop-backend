@@ -1,14 +1,27 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
-import { RestApi, Cors, LambdaIntegration } from "aws-cdk-lib/aws-apigateway";
+import {
+  RestApi,
+  LambdaIntegration,
+  TokenAuthorizer,
+  IdentitySource,
+} from "aws-cdk-lib/aws-apigateway";
 import { Bucket, EventType } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { LambdaDestination } from "aws-cdk-lib/aws-s3-notifications";
+import { PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
 import { Queue } from "aws-cdk-lib/aws-sqs";
 
 const BUCKET_NAME = process.env.BUCKET_NAME!;
 const SQS_ARN = process.env.SQS_ARN!;
 const SQS_URL = process.env.SQS_URL!;
+
+const headers = {
+  "Access-Control-Allow-Origin": "'*'",
+  "Access-Control-Allow-Headers":
+    "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+  "Access-Control-Allow-Methods": "'OPTIONS,GET,PUT'",
+};
 
 export class ImportServiceStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -47,6 +60,29 @@ export class ImportServiceStack extends cdk.Stack {
       }
     );
 
+    const basicAuthorizerFunction = lambda.Function.fromFunctionArn(
+      this,
+      "BasicAuthorizerHandler",
+      cdk.Fn.importValue("basicAuthorizerFunctionArn")
+    );
+
+    const authAssumeRole = new Role(this, "authRole", {
+      assumedBy: new ServicePrincipal("apigateway.amazonaws.com"),
+    });
+
+    authAssumeRole.addToPolicy(
+      new PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: [basicAuthorizerFunction.functionArn],
+      })
+    );
+
+    const authorizer = new TokenAuthorizer(this, "BasicAuthorizer", {
+      handler: basicAuthorizerFunction,
+      assumeRole: authAssumeRole,
+      identitySource: IdentitySource.header("Authorization"),
+    });
+
     bucket.grantReadWrite(importProductsFileFunction);
     bucket.grantReadWrite(importFileParserFunction);
 
@@ -54,15 +90,10 @@ export class ImportServiceStack extends cdk.Stack {
       restApiName: "Import Files Service",
       description: "For importing csv files",
       defaultCorsPreflightOptions: {
-        allowOrigins: Cors.ALL_ORIGINS,
-        allowMethods: Cors.ALL_METHODS,
-        allowHeaders: [
-          "Content-Type",
-          "X-Amz-Date",
-          "Authorization",
-          "X-Api-Key",
-          "X-Amz-Security-Token",
-        ],
+        allowOrigins: ["*"],
+        allowMethods: ["*"],
+        allowHeaders: ["*"],
+        allowCredentials: true,
       },
     });
 
@@ -75,8 +106,21 @@ export class ImportServiceStack extends cdk.Stack {
         requestParameters: {
           "method.request.querystring.name": true,
         },
+        authorizer,
       }
     );
+
+    api.addGatewayResponse("GatewayResponseUnauthorized", {
+      type: cdk.aws_apigateway.ResponseType.UNAUTHORIZED,
+      responseHeaders: headers,
+      statusCode: "401",
+    });
+
+    api.addGatewayResponse("GatewayResponseAccessDenied", {
+      type: cdk.aws_apigateway.ResponseType.ACCESS_DENIED,
+      responseHeaders: headers,
+      statusCode: "403",
+    });
 
     bucket.addEventNotification(
       EventType.OBJECT_CREATED,
